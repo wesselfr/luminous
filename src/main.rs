@@ -10,11 +10,12 @@ const HEIGHT: usize = 360;
 static KERNEL_SRC: &'static str = r#"
 
     __kernel void increase_blue(
+                read_only float time,
                 write_only image2d_t dst_image)
     {
         int2 coord = (int2)(get_global_id(0), get_global_id(1));
 
-        float4 pixel = (float4)(1.0, 0.0, 0.0, 1.0);
+        float4 pixel = (float4)(0.0, 0.0, 0.0, sin(time));
 
         write_imagef(dst_image, coord, pixel);
     }
@@ -22,7 +23,7 @@ static KERNEL_SRC: &'static str = r#"
 
 fn main() {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
-
+    let mut time: f32 = 2.0;
     let mut window = Window::new("LUMINOUS", WIDTH, HEIGHT, WindowOptions::default())
         .unwrap_or_else(|e| {
             panic!("{}", e);
@@ -54,14 +55,15 @@ fn main() {
         .build()
         .unwrap();
 
-    let kernel = Kernel::builder()
-        .program(&program)
-        .name("increase_blue")
-        .queue(queue.clone())
-        .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
-        .arg(&image_buffer)
-        .build()
-        .unwrap();
+    // let kernel = Kernel::builder()
+    //     .program(&program)
+    //     .name("increase_blue")
+    //     .queue(queue.clone())
+    //     .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
+    //     .arg(&time)
+    //     .arg(&image_buffer)
+    //     .build()
+    //     .unwrap();
 
     // Limit to max ~60 fps update rate
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
@@ -69,8 +71,19 @@ fn main() {
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // Run OCL Kernel
         unsafe {
+            let kernel = Kernel::builder()
+            .program(&program)
+            .name("increase_blue")
+            .queue(queue.clone())
+            .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
+            .arg(&time)
+            .arg(&image_buffer)
+            .build()
+            .unwrap();
             kernel.enq().unwrap();
         }
+
+        time += 0.1;
 
         // Copy output back.
         let mut buff = image::ImageBuffer::from_fn(WIDTH as u32, HEIGHT as u32, |x, y| {
