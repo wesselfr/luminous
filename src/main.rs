@@ -9,13 +9,13 @@ const HEIGHT: usize = 360;
 
 static KERNEL_SRC: &'static str = r#"
 
-    __kernel void increase_blue(
+    __kernel void main(
                 read_only float time,
                 write_only image2d_t dst_image)
     {
         int2 coord = (int2)(get_global_id(0), get_global_id(1));
 
-        float4 pixel = (float4)(0.0, 0.0, 0.0, sin(time));
+        float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
 
         write_imagef(dst_image, coord, pixel);
     }
@@ -47,23 +47,10 @@ fn main() {
         .channel_data_type(ImageChannelDataType::UnormInt8)
         .image_type(MemObjectType::Image2d)
         .dims(SpatialDims::Two(WIDTH, HEIGHT))
-        .flags(
-            ocl::flags::MEM_WRITE_ONLY
-                | ocl::flags::MEM_HOST_READ_ONLY
-        )
+        .flags(ocl::flags::MEM_WRITE_ONLY | ocl::flags::MEM_HOST_READ_ONLY)
         .queue(queue.clone())
         .build()
         .unwrap();
-
-    // let kernel = Kernel::builder()
-    //     .program(&program)
-    //     .name("increase_blue")
-    //     .queue(queue.clone())
-    //     .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
-    //     .arg(&time)
-    //     .arg(&image_buffer)
-    //     .build()
-    //     .unwrap();
 
     // Limit to max ~60 fps update rate
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
@@ -72,14 +59,14 @@ fn main() {
         // Run OCL Kernel
         unsafe {
             let kernel = Kernel::builder()
-            .program(&program)
-            .name("increase_blue")
-            .queue(queue.clone())
-            .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
-            .arg(&time)
-            .arg(&image_buffer)
-            .build()
-            .unwrap();
+                .program(&program)
+                .name("main")
+                .queue(queue.clone())
+                .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
+                .arg(&time)
+                .arg(&image_buffer)
+                .build()
+                .unwrap();
             kernel.enq().unwrap();
         }
 
@@ -93,13 +80,13 @@ fn main() {
 
         // Show output
         for (i, val) in buffer.iter_mut().enumerate() {
-
             let img = buff.iter().as_slice();
 
-            *val = ((img[i *4 + 0] as u32) << 24)
-                | ((img[i * 4 + 3] as u32) << 16)
-                | ((img[i * 4 + 2] as u32) << 8)
-                | (img[i * 4 + 1] as u32);
+            // Color ARGB
+            *val = ((img[i * 4 + 3] as u32) << 24)
+                | ((img[i * 4 + 0] as u32) << 16)
+                | ((img[i * 4 + 1] as u32) << 8)
+                | (img[i * 4 + 2] as u32);
         }
 
         // We unwrap here as we want this code to exit if it fails. Real applications may want to handle this in a different way
