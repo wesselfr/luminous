@@ -6,7 +6,7 @@ use ocl::{
 };
 
 const WIDTH: usize = 640;
-const HEIGHT: usize = 360;
+const HEIGHT: usize = 340;
 
 fn main() {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];

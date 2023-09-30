@@ -1,16 +1,78 @@
-float4 first_hit(float2 coord){
+struct ray{
+    float3 origin;
+    float3 direction;
+    float t;
+};
+
+struct sphere{
+    float3 position;
+    float radius;
+};
+
+struct sphere_intersection{
+    bool intersect;
+    float distance;
+};
+
+struct sphere_intersection intersect_sphere(struct sphere s, struct ray r){
+    struct sphere_intersection intersection = {intersect: false, distance: INFINITY};
+
+    float3 center = s.position - r.origin;
+    float distance = dot(center, r.direction);
+    float3 q = center - distance * r.direction;
+    float p2 = dot(q, q);
+    float radius2 = s.radius * s.radius;
+
+    if (p2 > radius2) {
+        return intersection;
+    }
+
+    float t1 = distance - sqrt(radius2 - p2);
+    float t2 = distance + sqrt(radius2 - p2);
+
+    if (t1 > 0.0 && t1 < r.t) {
+        intersection.intersect = true;
+        intersection.distance = t1;
+    } else if (t2 > 0.0 && t2 < r.t) {
+        intersection.intersect = true;
+        intersection.distance = t2;
+    }
+
+    return intersection;
+}
+
+
+float4 first_hit(float2 coord, float aspect_ratio){
     float3 cam_pos = {0.0,0.0,0.0};
     float3 view_dir = {0.0,0.0,1.0};
+    float3 test = {0.0,0.0,1.0};
     float fov = 1.0;
-    float3 center = cam_pos + fov*view_dir;
+    float3 center = cam_pos + fov * view_dir;
 
     float3 p0 = center + (float3)(-1.0, -1.0, 0.0);
     float3 p1 = center + (float3)(1.0, -1.0, 0.0);
     float3 p2 = center + (float3)(-1.0, 1.0, 0.0);
 
-    float3 screen_pos = p0 + (float)(coord.x) * (p1 - p0) + (float)(coord.y) * (p2 - p1);
+    float3 screen_pos = p0 + (float)(coord.x) * (p1 - p0) * aspect_ratio + (float)(coord.y) * (p2 - p0);
 
-    return (float4)(screen_pos, 0.0);
+    struct ray r; 
+    r.origin = cam_pos;
+    r.direction = normalize(screen_pos - cam_pos);
+    r.t = INFINITY;
+
+    struct sphere s;
+    s.position = (float3)(0.0, 0.0, 5.0);
+    s.radius = 1.0;
+
+    struct sphere_intersection result = intersect_sphere(s, r);
+
+    //return (float4)(r.direction, 0.0);
+    if (result.intersect){
+        return (float4)(1.0, 0.0, 0.0, 0.0);
+    }
+    else{
+        return (float4)(0.0,0.0,0.0,0.0);
+    }
 }
 
 __kernel void main(
@@ -24,7 +86,7 @@ __kernel void main(
 
     float2 uv = (float2)((float)coord.x / (float)(max_x),(float)(coord.y) / (float)(max_y));
 
-    float4 pixel = first_hit(uv);
+    float4 pixel = first_hit(uv, (float)max_x / (float)max_y);
     //float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
 
     write_imagef(dst_image, coord, pixel);
