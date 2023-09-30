@@ -1,3 +1,4 @@
+use std::fs;
 use minifb::{Key, Window, WindowOptions};
 use ocl::{
     enums::{ImageChannelDataType, ImageChannelOrder, MemObjectType},
@@ -6,20 +7,6 @@ use ocl::{
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 360;
-
-static KERNEL_SRC: &'static str = r#"
-
-    __kernel void main(
-                read_only float time,
-                write_only image2d_t dst_image)
-    {
-        int2 coord = (int2)(get_global_id(0), get_global_id(1));
-
-        float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
-
-        write_imagef(dst_image, coord, pixel);
-    }
-"#;
 
 fn main() {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
@@ -36,8 +23,10 @@ fn main() {
     let device = context.devices()[0];
     let queue = Queue::new(&context, device, None).unwrap();
 
-    let program = Program::builder()
-        .src(KERNEL_SRC)
+    let kernel_source = fs::read_to_string("src/shader.ocl").unwrap();
+
+    let mut program = Program::builder()
+        .src(kernel_source)
         .devices(device)
         .build(&context)
         .unwrap();
@@ -56,6 +45,23 @@ fn main() {
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        // Reload
+        if window.is_key_released(Key::R) {
+            println!("Reload >>");
+            let src = fs::read_to_string("src/shader.ocl").unwrap();
+            let prog = Program::builder().src(src).devices(device).build(&context);
+            match prog {
+                Ok(prog) => {
+                    program = prog;
+                    println!("Reload OK")
+                }
+                Err(error) => {
+                    println!("Reload FAIL");
+                    println!("{}", error.to_string())
+                }
+            }
+        }
+
         // Run OCL Kernel
         unsafe {
             let kernel = Kernel::builder()

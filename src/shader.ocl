@@ -1,0 +1,18 @@
+float4 first_hit(int2 coord){
+
+    float3 cam_pos = {0.0,0.0,0.0};
+
+    return 0.0;
+}
+
+__kernel void main(
+            read_only float time,
+            write_only image2d_t dst_image)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    // float4 pixel = first_hit(coord);
+    float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
+
+    write_imagef(dst_image, coord, pixel);
+}
