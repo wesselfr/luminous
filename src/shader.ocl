@@ -1,8 +1,16 @@
-float4 first_hit(int2 coord){
-
+float4 first_hit(float2 coord){
     float3 cam_pos = {0.0,0.0,0.0};
+    float3 view_dir = {0.0,0.0,1.0};
+    float fov = 1.0;
+    float3 center = cam_pos + fov*view_dir;
 
-    return 0.0;
+    float3 p0 = center + (float3)(-1.0, -1.0, 0.0);
+    float3 p1 = center + (float3)(1.0, -1.0, 0.0);
+    float3 p2 = center + (float3)(-1.0, 1.0, 0.0);
+
+    float3 screen_pos = p0 + (float)(coord.x) * (p1 - p0) + (float)(coord.y) * (p2 - p1);
+
+    return (float4)(screen_pos, 0.0);
 }
 
 __kernel void main(
@@ -11,8 +19,13 @@ __kernel void main(
 {
     int2 coord = (int2)(get_global_id(0), get_global_id(1));
 
-    // float4 pixel = first_hit(coord);
-    float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
+    int max_x = get_global_size(0) - 1; 
+    int max_y = get_global_size(1) - 1;
+
+    float2 uv = (float2)((float)coord.x / (float)(max_x),(float)(coord.y) / (float)(max_y));
+
+    float4 pixel = first_hit(uv);
+    //float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
 
     write_imagef(dst_image, coord, pixel);
 }
