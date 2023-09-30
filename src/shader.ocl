@@ -15,7 +15,9 @@ struct sphere_intersection{
 };
 
 struct sphere_intersection intersect_sphere(struct sphere s, struct ray r){
-    struct sphere_intersection intersection = {intersect: false, distance: INFINITY};
+    struct sphere_intersection intersection;
+    intersection.intersect = false;
+    intersection.distance = -INFINITY;
 
     float3 center = s.position - r.origin;
     float distance = dot(center, r.direction);
@@ -41,9 +43,12 @@ struct sphere_intersection intersect_sphere(struct sphere s, struct ray r){
     return intersection;
 }
 
+float3 get_ray_pos(struct ray r){
+    return r.origin + r.t * r.direction;
+}
 
-float4 first_hit(float2 coord, float aspect_ratio){
-    float3 cam_pos = {0.0,0.0,0.0};
+float4 first_hit(float2 coord, float aspect_ratio, float time){
+    float3 cam_pos = {0.0,0.0,-2.0};
     float3 view_dir = {0.0,0.0,1.0};
     float3 test = {0.0,0.0,1.0};
     float fov = 1.0;
@@ -61,14 +66,21 @@ float4 first_hit(float2 coord, float aspect_ratio){
     r.t = INFINITY;
 
     struct sphere s;
-    s.position = (float3)(0.0, 0.0, 5.0);
-    s.radius = 1.0;
+    s.position = (float3)(cos(time), sin(time) * 2.0, 5.0);
+    s.radius = 5.0;
 
     struct sphere_intersection result = intersect_sphere(s, r);
 
     //return (float4)(r.direction, 0.0);
     if (result.intersect){
-        return (float4)(1.0, 0.0, 0.0, 0.0);
+        r.t = result.distance;
+        float3 ray_pos = get_ray_pos(r);
+        float3 normal =  normalize(ray_pos - s.position);
+        float distance = 1.0 / r.t;
+
+        //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
+        return (float4)(distance,distance,distance,0.0);
+        //return (float4)(1.0,0.0,0.0,0.0);
     }
     else{
         return (float4)(0.0,0.0,0.0,0.0);
@@ -86,7 +98,7 @@ __kernel void main(
 
     float2 uv = (float2)((float)coord.x / (float)(max_x),(float)(coord.y) / (float)(max_y));
 
-    float4 pixel = first_hit(uv, (float)max_x / (float)max_y);
+    float4 pixel = first_hit(uv, (float)max_x / (float)max_y, time);
     //float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
 
     write_imagef(dst_image, coord, pixel);
