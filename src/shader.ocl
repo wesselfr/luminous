@@ -7,7 +7,7 @@ struct ray{
 struct sphere{
     float3 position;
     float radius;
-    float3 color;
+    int material_index;
 };
 
 struct sphere_intersection{
@@ -15,11 +15,19 @@ struct sphere_intersection{
     float distance;
 };
 
+struct material{
+    float3 albedo;
+    float reflectance;
+};
+
 #define EPSILON FLT_EPSILON
 #define MAX_DEPTH 100
 
 #define TOTAL_SPHERES 3
 struct sphere spheres[TOTAL_SPHERES] = {};
+
+#define TOTAL_MATERIALS 3
+struct material materials[TOTAL_MATERIALS] = {};
 
 struct sphere_intersection intersect_sphere(struct sphere s, struct ray r){
     struct sphere_intersection intersection;
@@ -81,10 +89,12 @@ float4 trace(struct ray r, int depth){
             float3 normal =  normalize(ray_pos - spheres[i].position);
             float distance = 1.0 / r.t;
 
+            struct material mat = materials[spheres[i].material_index];
+
             float ndl = -dot(normal, r.direction);
-            float4 color =  (float4)(spheres[i].color * ndl, 0.0);
+            float4 color = (float4)(mat.albedo * ndl, 0.0);
             float4 reflection = trace(reflect(get_ray_pos(r), normal, r), depth + 1);
-            return color * 0.7f + reflection * 0.3f;
+            return color * (1.0f - mat.reflectance) + reflection * mat.reflectance;
 
             //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
             //return color;
@@ -116,17 +126,26 @@ float4 first_hit(float2 coord, float aspect_ratio, float time){
     r.direction = normalize(screen_pos - cam_pos);
     r.t = INFINITY;
 
+    materials[0].albedo = (float3)(1.0, 0.0, 0.0);
+    materials[0].reflectance = 0.8f;
+
+    materials[1].albedo = (float3)(0.0, 1.0, 0.0);
+    materials[1].reflectance = 0.3f;
+
+    materials[2].albedo = (float3)(0.0, 0.0, 1.0);
+    materials[2].reflectance = 0.3f;
+
     spheres[0].position = (float3)(cos(time) * 4.0, sin(time) * 4.0, 5.0 + cos(time) * 3.0);
     spheres[0].radius = 2.0;
-    spheres[0].color = (float3)(1.0, 0.0, 0.0);
+    spheres[0].material_index = 0;
 
     spheres[1].position = (float3)(cos(time + 2.0) * 4.0, sin(time + 2.0) * 4.0, 5.0 + cos(time + 2.0) * 3.0);
     spheres[1].radius = 2.0;
-    spheres[1].color = (float3)(0.0, 1.0, 0.0);
+    spheres[1].material_index = 1;
 
     spheres[2].position = (float3)(cos(time + 4.0) * 4.0, sin(time + 4.0) * 4.0, 5.0 + cos(time + 4.0) * 3.0);
     spheres[2].radius = 2.0;
-    spheres[2].color = (float3)(0.0, 0.0, 1.0);
+    spheres[2].material_index = 2;
 
     return trace(r, 0);
 }
