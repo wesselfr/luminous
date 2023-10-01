@@ -14,6 +14,9 @@ struct sphere_intersection{
     float distance;
 };
 
+#define TOTAL_SPHERES 3
+struct sphere spheres[TOTAL_SPHERES] = {};
+
 struct sphere_intersection intersect_sphere(struct sphere s, struct ray r){
     struct sphere_intersection intersection;
     intersection.intersect = false;
@@ -65,27 +68,35 @@ float4 first_hit(float2 coord, float aspect_ratio, float time){
     r.direction = normalize(screen_pos - cam_pos);
     r.t = INFINITY;
 
-    struct sphere s;
-    s.position = (float3)(cos(time) * 4.0, sin(time) * 4.0, 5.0);
-    s.radius = 2.0;
+    spheres[0].position = (float3)(cos(time) * 4.0, sin(time) * 4.0, 5.0);
+    spheres[0].radius = 2.0;
 
-    struct sphere_intersection result = intersect_sphere(s, r);
+    spheres[1].position = (float3)(cos(time + 2.0) * 4.0, sin(time + 2.0) * 4.0, 5.0);
+    spheres[1].radius = 2.0;
 
-    //return (float4)(r.direction, 0.0);
-    if (result.intersect){
-        r.t = result.distance;
-        float3 ray_pos = get_ray_pos(r);
-        float3 normal =  normalize(ray_pos - s.position);
-        float distance = 1.0 / r.t;
+    spheres[2].position = (float3)(cos(time + 4.0) * 4.0, sin(time + 4.0) * 4.0, 5.0);
+    spheres[2].radius = 2.0;
 
-        float ndl = -dot(normal, r.direction);
+    bool did_intersect = false;
+    for (int i = 0; i < TOTAL_SPHERES; i++){
+        struct sphere_intersection result = intersect_sphere(spheres[i], r);
+        if (result.intersect){
+            did_intersect = true;
+            r.t = result.distance;
+            float3 ray_pos = get_ray_pos(r);
+            float3 normal =  normalize(ray_pos - spheres[i].position);
+            float distance = 1.0 / r.t;
 
-        //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
-        return (float4)(ndl, ndl, ndl, 0.0);
-        //return (float4)(distance,distance,distance,0.0);
-        //return (float4)(1.0,0.0,0.0,0.0);
+            float ndl = -dot(normal, r.direction);
+
+            //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
+            return (float4)(ndl, ndl, ndl, 0.0);
+            //return (float4)(distance,distance,distance,0.0);
+            //return (float4)(1.0,0.0,0.0,0.0);
+        }
     }
-    else{
+
+    if (!did_intersect){
         return (float4)(0.0,0.0,0.0,0.0);
     }
 }
