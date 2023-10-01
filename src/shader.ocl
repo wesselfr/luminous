@@ -7,12 +7,16 @@ struct ray{
 struct sphere{
     float3 position;
     float radius;
+    float3 color;
 };
 
 struct sphere_intersection{
     bool intersect;
     float distance;
 };
+
+#define EPSILON FLT_EPSILON
+#define MAX_DEPTH 100
 
 #define TOTAL_SPHERES 3
 struct sphere spheres[TOTAL_SPHERES] = {};
@@ -50,6 +54,50 @@ float3 get_ray_pos(struct ray r){
     return r.origin + r.t * r.direction;
 }
 
+struct ray reflect(float3 hit, float3 normal, struct ray in_ray){
+    struct ray out_ray;
+    float3 reflect_dir = in_ray.direction - 2.0f * dot(in_ray.direction, normal) * normal;
+
+    out_ray.origin = hit + reflect_dir * 0.01f;
+    out_ray.direction = reflect_dir;
+    out_ray.t = INFINITY;
+    
+    return out_ray;
+}
+
+float4 trace(struct ray r, int depth){
+    bool did_intersect = false;
+
+    if (MAX_DEPTH > 100){
+        return (float4)(0.0,0.0,0.0,0.0);
+    }
+
+    for (int i = 0; i < TOTAL_SPHERES; i++){
+        struct sphere_intersection result = intersect_sphere(spheres[i], r);
+        if (result.intersect){
+            did_intersect = true;
+            r.t = result.distance;
+            float3 ray_pos = get_ray_pos(r);
+            float3 normal =  normalize(ray_pos - spheres[i].position);
+            float distance = 1.0 / r.t;
+
+            float ndl = -dot(normal, r.direction);
+            float4 color =  (float4)(spheres[i].color * ndl, 0.0);
+            float4 reflection = trace(reflect(get_ray_pos(r), normal, r), depth + 1);
+            return color * 0.7f + reflection * 0.3f;
+
+            //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
+            //return color;
+            //return (float4)(distance,distance,distance,0.0);
+            //return (float4)(1.0,0.0,0.0,0.0);
+        }
+    }
+
+    if (!did_intersect){
+        return (float4)(0.0,0.0,0.0,0.0);
+    }
+}
+
 float4 first_hit(float2 coord, float aspect_ratio, float time){
     float3 cam_pos = {0.0,0.0,-2.0};
     float3 view_dir = {0.0,0.0,1.0};
@@ -68,37 +116,19 @@ float4 first_hit(float2 coord, float aspect_ratio, float time){
     r.direction = normalize(screen_pos - cam_pos);
     r.t = INFINITY;
 
-    spheres[0].position = (float3)(cos(time) * 4.0, sin(time) * 4.0, 5.0);
+    spheres[0].position = (float3)(cos(time) * 4.0, sin(time) * 4.0, 5.0 + cos(time) * 3.0);
     spheres[0].radius = 2.0;
+    spheres[0].color = (float3)(1.0, 0.0, 0.0);
 
-    spheres[1].position = (float3)(cos(time + 2.0) * 4.0, sin(time + 2.0) * 4.0, 5.0);
+    spheres[1].position = (float3)(cos(time + 2.0) * 4.0, sin(time + 2.0) * 4.0, 5.0 + cos(time + 2.0) * 3.0);
     spheres[1].radius = 2.0;
+    spheres[1].color = (float3)(0.0, 1.0, 0.0);
 
-    spheres[2].position = (float3)(cos(time + 4.0) * 4.0, sin(time + 4.0) * 4.0, 5.0);
+    spheres[2].position = (float3)(cos(time + 4.0) * 4.0, sin(time + 4.0) * 4.0, 5.0 + cos(time + 4.0) * 3.0);
     spheres[2].radius = 2.0;
+    spheres[2].color = (float3)(0.0, 0.0, 1.0);
 
-    bool did_intersect = false;
-    for (int i = 0; i < TOTAL_SPHERES; i++){
-        struct sphere_intersection result = intersect_sphere(spheres[i], r);
-        if (result.intersect){
-            did_intersect = true;
-            r.t = result.distance;
-            float3 ray_pos = get_ray_pos(r);
-            float3 normal =  normalize(ray_pos - spheres[i].position);
-            float distance = 1.0 / r.t;
-
-            float ndl = -dot(normal, r.direction);
-
-            //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
-            return (float4)(ndl, ndl, ndl, 0.0);
-            //return (float4)(distance,distance,distance,0.0);
-            //return (float4)(1.0,0.0,0.0,0.0);
-        }
-    }
-
-    if (!did_intersect){
-        return (float4)(0.0,0.0,0.0,0.0);
-    }
+    return trace(r, 0);
 }
 
 __kernel void main(
@@ -113,6 +143,7 @@ __kernel void main(
     float2 uv = (float2)((float)coord.x / (float)(max_x),(float)(coord.y) / (float)(max_y));
 
     float4 pixel = first_hit(uv, (float)max_x / (float)max_y, time);
+    // NOTE: Sanity Check.
     //float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
 
     write_imagef(dst_image, coord, pixel);
