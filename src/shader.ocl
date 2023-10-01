@@ -62,6 +62,19 @@ float3 get_ray_pos(struct ray r){
     return r.origin + r.t * r.direction;
 }
 
+float2 get_sphere_uv_coordinates(float3 point){
+    float theta = acos(-point.y);
+    float phi = atan2(point.z, point.x) + M_PI;
+    return (float2)(phi/(M_PI*2.0), theta / M_PI);
+}
+
+float4 get_sky_color(float3 direction, image2d_t sky){
+     const sampler_t samplerA = CLK_NORMALIZED_COORDS_TRUE |
+                                CLK_ADDRESS_NONE |
+                                CLK_FILTER_NEAREST;
+    return read_imagef(sky, samplerA, get_sphere_uv_coordinates(direction));
+}
+
 struct ray reflect(float3 hit, float3 normal, struct ray in_ray){
     struct ray out_ray;
     float3 reflect_dir = in_ray.direction - 2.0f * dot(in_ray.direction, normal) * normal;
@@ -73,7 +86,7 @@ struct ray reflect(float3 hit, float3 normal, struct ray in_ray){
     return out_ray;
 }
 
-float4 trace(struct ray r, int depth){
+float4 trace(struct ray r, int depth, image2d_t sky){
     bool did_intersect = false;
 
     if (MAX_DEPTH > 100){
@@ -93,7 +106,7 @@ float4 trace(struct ray r, int depth){
 
             float ndl = -dot(normal, r.direction);
             float4 color = (float4)(mat.albedo * ndl, 0.0);
-            float4 reflection = trace(reflect(get_ray_pos(r), normal, r), depth + 1);
+            float4 reflection = trace(reflect(get_ray_pos(r), normal, r), depth + 1, sky);
             return color * (1.0f - mat.reflectance) + reflection * mat.reflectance;
 
             //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
@@ -104,13 +117,14 @@ float4 trace(struct ray r, int depth){
     }
 
     if (!did_intersect){
-        return (float4)(0.0,0.0,0.0,0.0);
+        return get_sky_color(r.direction, sky);
+        //return (float4)(0.0,0.0,0.0,0.0);
     }
 }
 
-float4 first_hit(float2 coord, float aspect_ratio, float time){
+float4 first_hit(float2 coord, float aspect_ratio, float time, image2d_t sky){
     float3 cam_pos = {0.0,0.0,-2.0};
-    float3 view_dir = {0.0,0.0,1.0};
+    float3 view_dir = {0.0,sin(time * 0.5) * 0.1,1.0};
     float3 test = {0.0,0.0,1.0};
     float fov = 1.0;
     float3 center = cam_pos + fov * view_dir;
@@ -126,8 +140,8 @@ float4 first_hit(float2 coord, float aspect_ratio, float time){
     r.direction = normalize(screen_pos - cam_pos);
     r.t = INFINITY;
 
-    materials[0].albedo = (float3)(1.0, 0.0, 0.0);
-    materials[0].reflectance = 0.8f;
+    materials[0].albedo = (float3)(1.0, 1.0, 1.0);
+    materials[0].reflectance = 0.995f;
 
     materials[1].albedo = (float3)(0.0, 1.0, 0.0);
     materials[1].reflectance = 0.3f;
@@ -147,11 +161,12 @@ float4 first_hit(float2 coord, float aspect_ratio, float time){
     spheres[2].radius = 2.0;
     spheres[2].material_index = 2;
 
-    return trace(r, 0);
+    return trace(r, 0, sky);
 }
 
 __kernel void main(
             read_only float time,
+            read_only image2d_t sky_image,
             write_only image2d_t dst_image)
 {
     int2 coord = (int2)(get_global_id(0), get_global_id(1));
@@ -161,9 +176,20 @@ __kernel void main(
 
     float2 uv = (float2)((float)coord.x / (float)(max_x),(float)(coord.y) / (float)(max_y));
 
-    float4 pixel = first_hit(uv, (float)max_x / (float)max_y, time);
+    float4 pixel = first_hit(uv, (float)max_x / (float)max_y, time, sky_image);
     // NOTE: Sanity Check.
     //float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
+    const sampler_t samplerA = CLK_NORMALIZED_COORDS_TRUE |
+                           CLK_FILTER_NEAREST;
+    //float4 pixel = read_imagef(sky_image, samplerA, uv);
+
+    // HDR Tonemapping
+    // Exposure
+    float exposure = 8.0f;
+    // Apply exposure adjustment
+    float4 linear_value = pixel * exposure;
+    // Apply tone mapping: Simple linear scaling to [0, 1]
+    pixel = linear_value / (1.0f + linear_value);
 
     write_imagef(dst_image, coord, pixel);
 }

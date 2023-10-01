@@ -4,6 +4,7 @@ use ocl::{
     enums::{ImageChannelDataType, ImageChannelOrder, MemObjectType},
     Context, Device, Image, Kernel, Program, Queue, SpatialDims,
 };
+use image::{io::Reader as ImageReader, GenericImageView};
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 640;
@@ -31,6 +32,23 @@ fn main() {
         .build(&context)
         .unwrap();
 
+    println!("Load called");
+    let sky_texture = ImageReader::open("src/textures/skybox.hdr").unwrap().decode().unwrap();
+    println!("Load OK");
+
+    assert!(sky_texture.width() > 0);
+
+    let sky_buffer = Image::<f32>::builder()
+        .channel_order(ImageChannelOrder::Rgba)
+        .channel_data_type(ImageChannelDataType::Float)
+        .image_type(MemObjectType::Image2d)
+        .dims(SpatialDims::Two(sky_texture.width() as usize, sky_texture.height() as usize))
+        .flags(ocl::flags::MEM_READ_ONLY | ocl::flags::MEM_HOST_WRITE_ONLY)
+        .copy_host_slice(&sky_texture.into_rgba32f())
+        .queue(queue.clone())
+        .build()
+        .unwrap();
+    
     let image_buffer = Image::<u8>::builder()
         .channel_order(ImageChannelOrder::Rgba)
         .channel_data_type(ImageChannelDataType::UnormInt8)
@@ -73,6 +91,7 @@ fn main() {
                 .queue(queue.clone())
                 .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
                 .arg(&time)
+                .arg(&sky_buffer)
                 .arg(&image_buffer)
                 .build()
                 .unwrap();
