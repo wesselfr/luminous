@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, time::Instant};
 use minifb::{Key, Window, WindowOptions};
 use ocl::{
     enums::{ImageChannelDataType, ImageChannelOrder, MemObjectType},
@@ -44,7 +44,10 @@ fn main() {
     // Limit to max ~60 fps update rate
     //window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
+    let mut delta_time = 0.0;
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        let mut frame_start = Instant::now();
         // Reload
         if window.is_key_released(Key::R) {
             println!("Reload >>");
@@ -76,7 +79,7 @@ fn main() {
             kernel.enq().unwrap();
         }
 
-        time += 0.1;
+        time += delta_time;
 
         // Copy output back.
         let mut buff = image::ImageBuffer::from_fn(WIDTH as u32, HEIGHT as u32, |x, y| {
@@ -97,5 +100,7 @@ fn main() {
 
         // We unwrap here as we want this code to exit if it fails. Real applications may want to handle this in a different way
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+
+        delta_time = frame_start.elapsed().as_secs_f32();
     }
 }

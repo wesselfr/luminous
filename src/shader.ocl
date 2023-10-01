@@ -66,8 +66,8 @@ float4 first_hit(float2 coord, float aspect_ratio, float time){
     r.t = INFINITY;
 
     struct sphere s;
-    s.position = (float3)(cos(time), sin(time) * 2.0, 5.0);
-    s.radius = 5.0;
+    s.position = (float3)(cos(time) * 4.0, sin(time) * 4.0, 5.0);
+    s.radius = 2.0;
 
     struct sphere_intersection result = intersect_sphere(s, r);
 
@@ -78,8 +78,11 @@ float4 first_hit(float2 coord, float aspect_ratio, float time){
         float3 normal =  normalize(ray_pos - s.position);
         float distance = 1.0 / r.t;
 
+        float ndl = -dot(normal, r.direction);
+
         //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
-        return (float4)(distance,distance,distance,0.0);
+        return (float4)(ndl, ndl, ndl, 0.0);
+        //return (float4)(distance,distance,distance,0.0);
         //return (float4)(1.0,0.0,0.0,0.0);
     }
     else{
