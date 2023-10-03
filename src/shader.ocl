@@ -108,7 +108,19 @@ float4 trace(struct ray r, int depth, image2d_t sky){
                     normal = -normal;
                 }
 
-                return refract(get_ray_pos(r), normal, r, n / nt, ++depth, sky);
+                float incomming_angle = dot(normal, r.direction);
+                float div_refractive_index = n/nt;
+                float out_angle = sqrt(1.0f - pow(div_refractive_index * incomming_angle,2.0f));
+
+                // Schlick's approximation
+                float3 ray_dir = r.direction;
+                if(dot(normal, ray_dir) < 0.0f){
+                    ray_dir = -ray_dir;
+                }
+                float reflectance = ((n - nt) / (n + nt)) * ((n - nt) / (n + nt));
+                float fresnel = reflectance + (1.f - reflectance) * (pow(1.f - dot(normal, ray_dir), 5.0f));;
+
+                return refract(get_ray_pos(r), normal, r, div_refractive_index, ++depth, sky) * (1.0f - fresnel) + reflect(get_ray_pos(r), normal, r, ++depth, sky) * (fresnel);
             }
 
             float ndl = -dot(normal, r.direction);
@@ -157,7 +169,7 @@ float4 refract(float3 hit, float3 normal, struct ray in_ray, float refractive_in
 }
 
 float4 first_hit(float2 coord, float aspect_ratio, float time, image2d_t sky){
-    float3 cam_pos = {0.0,0.0,-10.0};
+    float3 cam_pos = {0.0,0.0,-2.0};
     float3 view_dir = {0.0,sin(time * 0.5) * 0.1,1.0};
     float3 test = {0.0,0.0,1.0};
     float fov = 1.0;
