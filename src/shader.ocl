@@ -20,8 +20,8 @@ struct material{
     float reflectance;
 };
 
-#define EPSILON FLT_EPSILON
-#define MAX_DEPTH 100
+#define EPSILON 0.0001f
+#define MAX_DEPTH 5
 
 #define TOTAL_SPHERES 3
 struct sphere spheres[TOTAL_SPHERES] = {};
@@ -75,22 +75,14 @@ float4 get_sky_color(float3 direction, image2d_t sky){
     return read_imagef(sky, samplerA, get_sphere_uv_coordinates(direction));
 }
 
-struct ray reflect(float3 hit, float3 normal, struct ray in_ray){
-    struct ray out_ray;
-    float3 reflect_dir = in_ray.direction - 2.0f * dot(in_ray.direction, normal) * normal;
-
-    out_ray.origin = hit + reflect_dir * 0.01f;
-    out_ray.direction = reflect_dir;
-    out_ray.t = INFINITY;
-    
-    return out_ray;
-}
+float4 reflect(float3 hit, float3 normal, struct ray in_ray, int depth, image2d_t sky);
+float4 refract(float3 hit, float3 normal, struct ray in_ray, float refractive_index_div, int depth, image2d_t sky);
 
 float4 trace(struct ray r, int depth, image2d_t sky){
     bool did_intersect = false;
 
-    if (MAX_DEPTH > 100){
-        return (float4)(0.0,0.0,0.0,0.0);
+    if (depth >= MAX_DEPTH){
+        return (float4)(1.0,0.0,1.0,0.0);
     }
 
     for (int i = 0; i < TOTAL_SPHERES; i++){
@@ -103,10 +95,25 @@ float4 trace(struct ray r, int depth, image2d_t sky){
             float distance = 1.0 / r.t;
 
             struct material mat = materials[spheres[i].material_index];
+            if (spheres[i].material_index == 1){
+
+                float n = 1.0f;
+                float nt = 1.52f;
+
+                if(dot(r.direction, normal)>0){
+                    //n = 1.f / n;
+                    //nt = 1.f / nt;
+                    n = 1.52f;
+                    nt = 1.0f;
+                    normal = -normal;
+                }
+
+                return refract(get_ray_pos(r), normal, r, n / nt, ++depth, sky);
+            }
 
             float ndl = -dot(normal, r.direction);
             float4 color = (float4)(mat.albedo * ndl, 0.0);
-            float4 reflection = trace(reflect(get_ray_pos(r), normal, r), depth + 1, sky);
+            float4 reflection = reflect(get_ray_pos(r), normal, r, ++depth, sky);
             return color * (1.0f - mat.reflectance) + reflection * mat.reflectance;
 
             //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
@@ -118,12 +125,39 @@ float4 trace(struct ray r, int depth, image2d_t sky){
 
     if (!did_intersect){
         return get_sky_color(r.direction, sky);
-        //return (float4)(0.0,0.0,0.0,0.0);
     }
 }
 
+float4 reflect(float3 hit, float3 normal, struct ray in_ray, int depth, image2d_t sky){
+    struct ray out_ray;
+    float3 reflect_dir = in_ray.direction - 2.0f * dot(in_ray.direction, normal) * normal;
+
+    out_ray.origin = hit + reflect_dir * 0.001f;
+    out_ray.direction = reflect_dir;
+    out_ray.t = INFINITY;
+    
+    return trace(out_ray, depth, sky);
+}
+
+float4 refract(float3 hit, float3 normal, struct ray in_ray, float refractive_index_div, int depth, image2d_t sky){
+    float incomming_angle = dot(normal, in_ray.direction);
+    float k = 1.0f - (refractive_index_div*refractive_index_div) * (1.0f - (incomming_angle*incomming_angle));
+    if (k >= 0.0f){
+        struct ray out_ray;
+
+        float3 out_dir = refractive_index_div * in_ray.direction + normal * (refractive_index_div*incomming_angle - sqrt(k));
+        out_ray.origin = hit * out_dir * EPSILON;
+        out_ray.direction = out_dir;
+        out_ray.t = INFINITY;
+
+        return trace(out_ray, depth, sky);
+        //return (float4)(1.0f, 1.0f, 1.0f, 1.0f);
+    }
+    return (float4)(0.0f, 0.0f, 0.0f, 0.0f);
+}
+
 float4 first_hit(float2 coord, float aspect_ratio, float time, image2d_t sky){
-    float3 cam_pos = {0.0,0.0,-2.0};
+    float3 cam_pos = {0.0,0.0,-10.0};
     float3 view_dir = {0.0,sin(time * 0.5) * 0.1,1.0};
     float3 test = {0.0,0.0,1.0};
     float fov = 1.0;
@@ -180,6 +214,7 @@ __kernel void main(
     // NOTE: Sanity Check.
     //float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
     const sampler_t samplerA = CLK_NORMALIZED_COORDS_TRUE |
+                            CLK_ADDRESS_CLAMP |
                            CLK_FILTER_NEAREST;
     //float4 pixel = read_imagef(sky_image, samplerA, uv);
 
