@@ -90,55 +90,67 @@ float4 trace(struct ray r, int depth, image2d_t sky){
         return (float4)(1.0,0.0,1.0,0.0);
     }
 
+    // Find intersection
+    float last_distance = INFINITY;
+    struct sphere_intersection result;
+    int object_index = -1;
     for (int i = 0; i < TOTAL_SPHERES; i++){
-        struct sphere_intersection result = intersect_sphere(spheres[i], r);
-        if (result.intersect){
+        struct sphere_intersection current_result = intersect_sphere(spheres[i], r);
+        float distance = current_result.distance;
+        if (current_result.intersect && distance >= 0.0 && distance < last_distance){
+            last_distance = distance;
+            object_index = i;
             did_intersect = true;
-            r.t = result.distance;
-            float3 ray_pos = get_ray_pos(r);
-            float3 normal =  normalize(ray_pos - spheres[i].position);
-            float distance = 1.0 / r.t;
-
-            struct material mat = materials[spheres[i].material_index];
-            if (spheres[i].material_index == 1){
-
-                float n = 1.0f;
-                float nt = 1.52f;
-
-                if(dot(r.direction, normal)>0){
-                    //n = 1.f / n;
-                    //nt = 1.f / nt;
-                    n = 1.52f;
-                    nt = 1.0f;
-                    normal = -normal;
-                }
-
-                float incomming_angle = dot(normal, r.direction);
-                float div_refractive_index = n/nt;
-                float out_angle = sqrt(1.0f - pow(div_refractive_index * incomming_angle,2.0f));
-
-                // Schlick's approximation
-                float3 ray_dir = r.direction;
-                if(dot(normal, ray_dir) < 0.0f){
-                    ray_dir = -ray_dir;
-                }
-                float reflectance = ((n - nt) / (n + nt)) * ((n - nt) / (n + nt));
-                float fresnel = reflectance + (1.f - reflectance) * (pow(1.f - dot(normal, ray_dir), 5.0f));;
-
-                return refract(get_ray_pos(r), normal, r, div_refractive_index, ++depth, sky) * (1.0f - fresnel) + reflect(get_ray_pos(r), normal, r, ++depth, sky) * (fresnel);
-            }
-
-            float ndl = -dot(normal, r.direction);
-            float4 color = (float4)(mat.albedo * ndl, 0.0);
-            float4 reflection = reflect(get_ray_pos(r), normal, r, ++depth, sky);
-            return color * (1.0f - mat.reflectance) + reflection * mat.reflectance;
-
-            //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
-            //return color;
-            //return (float4)(distance,distance,distance,0.0);
-            //return (float4)(1.0,0.0,0.0,0.0);
+            result = current_result;
         }
     }
+
+    // Apply shading
+    if (did_intersect){
+        r.t = result.distance;
+        float3 ray_pos = get_ray_pos(r);
+        float3 normal =  normalize(ray_pos - spheres[object_index].position);
+
+        struct material mat = materials[spheres[object_index].material_index];
+        if (spheres[object_index].material_index == 1){
+
+            float n = 1.0f;
+            float nt = 1.52f;
+
+            if(dot(r.direction, normal)>0){
+                //n = 1.f / n;
+                //nt = 1.f / nt;
+                n = 1.52f;
+                nt = 1.0f;
+                normal = -normal;
+            }
+
+            float incomming_angle = dot(normal, r.direction);
+            float div_refractive_index = n/nt;
+            float out_angle = sqrt(1.0f - pow(div_refractive_index * incomming_angle,2.0f));
+
+            // Schlick's approximation
+            float3 ray_dir = r.direction;
+            if(dot(normal, ray_dir) < 0.0f){
+                ray_dir = -ray_dir;
+            }
+            float reflectance = ((n - nt) / (n + nt)) * ((n - nt) / (n + nt));
+            float fresnel = reflectance + (1.f - reflectance) * (pow(1.f - dot(normal, ray_dir), 5.0f));;
+
+            return refract(get_ray_pos(r), normal, r, div_refractive_index, ++depth, sky) * (1.0f - fresnel) + reflect(get_ray_pos(r), normal, r, ++depth, sky) * (fresnel);
+        }
+
+        float ndl = -dot(normal, r.direction);
+        float4 color = (float4)(mat.albedo * ndl, 0.0);
+        float4 reflection = reflect(get_ray_pos(r), normal, r, ++depth, sky);
+        return color * (1.0f - mat.reflectance) + reflection * mat.reflectance;
+
+        //return (float4)(0.5 * normal.x + 1, 0.5 * normal.y + 1, 0.5 * normal.z + 1, 0.0);
+        //return color;
+        //return (float4)(distance,distance,distance,0.0);
+        //return (float4)(1.0,0.0,0.0,0.0);
+    }
+    
 
     if (!did_intersect){
         return get_sky_color(r.direction, sky);
@@ -149,7 +161,7 @@ float4 reflect(float3 hit, float3 normal, struct ray in_ray, int depth, image2d_
     struct ray out_ray;
     float3 reflect_dir = in_ray.direction - 2.0f * dot(in_ray.direction, normal) * normal;
 
-    out_ray.origin = hit + reflect_dir * 0.001f;
+    out_ray.origin = hit + reflect_dir * EPSILON;
     out_ray.direction = reflect_dir;
     out_ray.t = INFINITY;
     
