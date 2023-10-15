@@ -20,6 +20,11 @@ struct material{
     float reflectance;
 };
 
+struct camera{
+    float3 pos;
+    float3 dir;
+};
+
 #define EPSILON 0.0001f
 #define MAX_DEPTH 5
 
@@ -168,9 +173,25 @@ float4 refract(float3 hit, float3 normal, struct ray in_ray, float refractive_in
     return (float4)(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
-float4 first_hit(float2 coord, float aspect_ratio, float time, image2d_t sky){
-    float3 cam_pos = {0.0,0.0,-2.0};
-    float3 view_dir = {0.0,sin(time * 0.5) * 0.1,1.0};
+float3 transform_vector3_matrix(float16 matrix, float3 in){
+    float4 out;
+    float4 x_axis = matrix.s0123;
+    float4 y_axis = matrix.s4567;
+    float4 z_axis = matrix.s89AB;
+
+    out = x_axis * in.x;
+    out += y_axis * in.y;
+    out += z_axis * in.z;
+
+    return out.xyz;
+}
+
+float4 first_hit(float2 coord, float aspect_ratio, float time, float16 camera_matrix, image2d_t sky){
+    
+    float3 cam_pos = camera_matrix.sCDE;
+    //float3 view_dir = {0.0,sin(time * 0.5) * 0.1,1.0};
+    float3 view_dir = {0.0, 0.0, 1.0};
+
     float3 test = {0.0,0.0,1.0};
     float fov = 1.0;
     float3 center = cam_pos + fov * view_dir;
@@ -178,6 +199,12 @@ float4 first_hit(float2 coord, float aspect_ratio, float time, image2d_t sky){
     float3 p0 = center + (float3)(-1.0, -1.0, 0.0);
     float3 p1 = center + (float3)(1.0, -1.0, 0.0);
     float3 p2 = center + (float3)(-1.0, 1.0, 0.0);
+
+    // Apply Camera Matrix
+    cam_pos = transform_vector3_matrix(camera_matrix, cam_pos);
+    p0 = transform_vector3_matrix(camera_matrix, p0);
+    p1 = transform_vector3_matrix(camera_matrix, p1);
+    p2 = transform_vector3_matrix(camera_matrix, p2);
 
     float3 screen_pos = p0 + (float)(coord.x) * (p1 - p0) * aspect_ratio + (float)(coord.y) * (p2 - p0);
 
@@ -212,6 +239,7 @@ float4 first_hit(float2 coord, float aspect_ratio, float time, image2d_t sky){
 
 __kernel void main(
             read_only float time,
+            __global float16* camera_matrix,
             read_only image2d_t sky_image,
             write_only image2d_t dst_image)
 {
@@ -222,7 +250,7 @@ __kernel void main(
 
     float2 uv = (float2)((float)coord.x / (float)(max_x),(float)(coord.y) / (float)(max_y));
 
-    float4 pixel = first_hit(uv, (float)max_x / (float)max_y, time, sky_image);
+    float4 pixel = first_hit(uv, (float)max_x / (float)max_y, time, *camera_matrix, sky_image);
     // NOTE: Sanity Check.
     //float4 pixel = (float4)(sin(time), cos(time), 0.0, 1.0);
     const sampler_t samplerA = CLK_NORMALIZED_COORDS_TRUE |

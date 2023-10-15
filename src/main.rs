@@ -1,13 +1,19 @@
-use std::{fs, time::Instant};
+use glam::{Vec3, Mat4, Quat};
+use image::{io::Reader as ImageReader, GenericImageView};
 use minifb::{Key, Window, WindowOptions};
 use ocl::{
     enums::{ImageChannelDataType, ImageChannelOrder, MemObjectType},
-    Context, Device, Image, Kernel, Program, Queue, SpatialDims,
+    Buffer, Context, Device, Image, Kernel, OclPrm, Program, Queue, SpatialDims,
 };
-use image::{io::Reader as ImageReader, GenericImageView};
+use std::{fs, time::Instant};
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 640;
+
+struct Camera {
+    cam_pos: Vec3,
+    cam_dir: Vec3,
+}
 
 fn main() {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
@@ -33,7 +39,10 @@ fn main() {
         .unwrap();
 
     println!("Load called");
-    let sky_texture = ImageReader::open("src/textures/skybox.hdr").unwrap().decode().unwrap();
+    let sky_texture = ImageReader::open("src/textures/skybox.hdr")
+        .unwrap()
+        .decode()
+        .unwrap();
     println!("Load OK");
 
     assert!(sky_texture.width() > 0);
@@ -42,13 +51,16 @@ fn main() {
         .channel_order(ImageChannelOrder::Rgba)
         .channel_data_type(ImageChannelDataType::Float)
         .image_type(MemObjectType::Image2d)
-        .dims(SpatialDims::Two(sky_texture.width() as usize, sky_texture.height() as usize))
+        .dims(SpatialDims::Two(
+            sky_texture.width() as usize,
+            sky_texture.height() as usize,
+        ))
         .flags(ocl::flags::MEM_READ_ONLY | ocl::flags::MEM_HOST_WRITE_ONLY)
         .copy_host_slice(&sky_texture.into_rgba32f())
         .queue(queue.clone())
         .build()
         .unwrap();
-    
+
     let image_buffer = Image::<u8>::builder()
         .channel_order(ImageChannelOrder::Rgba)
         .channel_data_type(ImageChannelDataType::UnormInt8)
@@ -58,6 +70,11 @@ fn main() {
         .queue(queue.clone())
         .build()
         .unwrap();
+
+    let mut camera = Camera {
+        cam_pos: Vec3::new(0.0, 0.0, -10.0),
+        cam_dir: Vec3::new(0.0, 0.0, 1.0),
+    };
 
     // Limit to max ~60 fps update rate
     //window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
@@ -83,6 +100,38 @@ fn main() {
             }
         }
 
+        if window.is_key_down(Key::A){
+            camera.cam_dir.y -= 8.0 * delta_time;
+        }
+        if window.is_key_down(Key::D){
+            camera.cam_dir.y += 8.0 * delta_time;
+        }
+
+        let camera_rotation = Quat::from_euler(glam::EulerRot::XYZ, 0.0, camera.cam_dir.y, 0.0);
+
+        let speed = 10.0;
+        let mut move_dir = Vec3::new(0.0,0.0,0.0);
+        if window.is_key_down(Key::W) {
+            move_dir += Vec3::new(0.0, 0.0, 1.0);
+        }
+
+        if window.is_key_down(Key::S) {
+            move_dir += Vec3::new(0.0, 0.0, -1.0);
+        }
+        camera.cam_pos += move_dir * speed * delta_time;
+
+        let camera_matrix = Mat4::from_scale_rotation_translation(Vec3::ONE, camera_rotation, camera.cam_pos);
+        let mut camera_slice: [f32; 16] = [0.0;16];
+        camera_matrix.write_cols_to_slice(&mut camera_slice);
+        
+        let camera_buffer = Buffer::builder()
+            .len(16)
+            .copy_host_slice(&camera_slice)
+            .flags(ocl::flags::MEM_READ_ONLY | ocl::flags::MEM_HOST_WRITE_ONLY)
+            .queue(queue.clone())
+            .build()
+            .unwrap();
+
         // Run OCL Kernel
         unsafe {
             let kernel = Kernel::builder()
@@ -91,6 +140,7 @@ fn main() {
                 .queue(queue.clone())
                 .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
                 .arg(&time)
+                .arg(&camera_buffer)
                 .arg(&sky_buffer)
                 .arg(&image_buffer)
                 .build()
