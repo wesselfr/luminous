@@ -150,11 +150,8 @@ float4 trace(struct ray r, int depth, image2d_t sky){
         //return (float4)(distance,distance,distance,0.0);
         //return (float4)(1.0,0.0,0.0,0.0);
     }
-    
 
-    if (!did_intersect){
-        return get_sky_color(r.direction, sky);
-    }
+    return get_sky_color(r.direction, sky);
 }
 
 float4 reflect(float3 hit, float3 normal, struct ray in_ray, int depth, image2d_t sky){
@@ -249,8 +246,8 @@ float4 first_hit(float2 coord, float aspect_ratio, float time, float16 camera_ma
     return trace(r, 0, sky);
 }
 
-__kernel void main(
-            read_only float time,
+__kernel void kernel_main(
+            float time,
             __global float16* camera_matrix,
             read_only image2d_t sky_image,
             write_only image2d_t dst_image)

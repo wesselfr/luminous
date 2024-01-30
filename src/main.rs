@@ -136,7 +136,7 @@ fn main() {
         unsafe {
             let kernel = Kernel::builder()
                 .program(&program)
-                .name("main")
+                .name("kernel_main")
                 .queue(queue.clone())
                 .global_work_size(SpatialDims::Two(WIDTH, HEIGHT))
                 .arg(&time)
